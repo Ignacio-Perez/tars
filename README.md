@@ -15,6 +15,10 @@ The SFM used by TARS is based on the model proposed by Helbing and Molnar:
 
 -  Helbing, Dirk & Molnar, Peter. (1998). *Social Force Model for Pedestrian Dynamics*. Physical Review E. 51. 10.1103/PhysRevE.51.4282. 
 
+## Dependencies
+
+sudo apt install ros-noetic-map-server
+
 ## Installation and quick start
 
 Clone this repository in the source folder of your catkin workspace and compile with catkin_make. Packages *map_server* and *rviz* are recommended.
