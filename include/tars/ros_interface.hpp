@@ -48,6 +48,7 @@ public:
 	
 	static void publishAgents(ros::Publisher& agentsPub, const ros::Time& currentTime);
 	static void publishNodes(ros::Publisher& nodesPub);
+	static void publishEdges(ros::Publisher& edgesPub);
 	static void publishForcesVisualization(ros::Publisher& forcesPub,const ros::Time& currentTime);
 	static void publishNodesVisualization(ros::Publisher& nodesPub, const ros::Time& currentTime);
 	static void publishEdgesVisualization(ros::Publisher& edgesPub, const ros::Time& currentTime);
@@ -342,6 +343,22 @@ void ROSInterface::publishNodesVisualization(ros::Publisher& nodesPub,const ros:
         markers.markers.push_back(marker);
 	}
 	nodesPub.publish(markers);
+}
+
+inline
+void ROSInterface::publishEdges(ros::Publisher& edgesPub) {
+	geometry_msgs::Polygon polygon;
+	for (auto it = GRAPH.getEdges().begin(); it!= GRAPH.getEdges().end(); ++it) {
+		geometry_msgs::Point32 p;
+		p.x = GRAPH[it->first.getSrc()].getX();
+		p.y = GRAPH[it->first.getSrc()].getY();
+		p.z = 0;
+		polygon.points.push_back(p);
+		p.x = GRAPH[it->first.getDst()].getX();
+		p.y = GRAPH[it->first.getDst()].getY();
+		polygon.points.push_back(p);
+	}
+	edgesPub.publish(polygon);
 }
 
 inline
