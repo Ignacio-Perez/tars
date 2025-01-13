@@ -30,6 +30,8 @@ SOFTWARE.
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/Polygon.h>
+#include <geometry_msgs/Point32.h>
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/Odometry.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -45,6 +47,7 @@ public:
 	void publish(const ros::Time& currentTime);
 	
 	static void publishAgents(ros::Publisher& agentsPub, const ros::Time& currentTime);
+	static void publishNodes(ros::Publisher& nodesPub);
 	static void publishForcesVisualization(ros::Publisher& forcesPub,const ros::Time& currentTime);
 	static void publishNodesVisualization(ros::Publisher& nodesPub, const ros::Time& currentTime);
 	static void publishEdgesVisualization(ros::Publisher& edgesPub, const ros::Time& currentTime);
@@ -290,7 +293,21 @@ void ROSInterface::publishForcesVisualization(ros::Publisher& forcesPub,const ro
 }
 
 inline
-void ROSInterface::publishNodesVisualization(ros::Publisher& nodesPub, const ros::Time& currentTime) {
+void ROSInterface::publishNodes(ros::Publisher& nodesPub) {
+	geometry_msgs::Polygon polygon;
+	for (auto it = GRAPH.getNodes().begin(); it!= GRAPH.getNodes().end(); ++it) {
+		geometry_msgs::Point32 p;
+		p.x = it->second.getX();
+		p.y = it->second.getY();
+		p.z = 0;
+		polygon.points.push_back(p);
+	}
+	nodesPub.publish(polygon);
+
+}
+
+inline
+void ROSInterface::publishNodesVisualization(ros::Publisher& nodesPub,const ros::Time& currentTime) {
 	visualization_msgs::MarkerArray markers;
 	unsigned counter = 0;
 	for (auto it = GRAPH.getNodes().begin(); it!= GRAPH.getNodes().end(); ++it) {

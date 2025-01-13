@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
 			interfaces.emplace_back((Robot*)AGENTS[i],n,pn);
 		}
 	}
+	ros::Publisher nodesPub = pn.advertise<geometry_msgs::Polygon>("/tars/nodes",1,true);
 	ros::Publisher agentsVisPub = pn.advertise<visualization_msgs::MarkerArray>("/tars/visualization/agents",1);
 	ros::Publisher nodesVisPub = pn.advertise<visualization_msgs::MarkerArray>("/tars/visualization/nodes",1);
 	ros::Publisher edgesVisPub = pn.advertise<visualization_msgs::MarkerArray>("/tars/visualization/edges",1);
@@ -74,10 +75,15 @@ int main(int argc, char** argv) {
 	ros::Rate r(TARS.getFreq());	
 	ros::Time currentTime = ros::Time::now();	
  	ros::Time prevTime = currentTime;
+ 	bool nodesPublished=false;
 	while (n.ok()) {
 		TARS.update((currentTime - prevTime).toSec());
 		for (auto it = interfaces.begin(); it!= interfaces.end(); ++it) {
 			it->publish(currentTime);
+		}
+		if (!nodesPublished) {
+			ROSInterface::publishNodes(nodesPub);
+			nodesPublished=true;
 		}
 		ROSInterface::publishAgents(agentsPub,currentTime);
 		ROSInterface::publishNodesVisualization(nodesVisPub,currentTime);
