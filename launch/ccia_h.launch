@@ -1,9 +1,0 @@
-<!-- -*- mode: XML -*- -->
-<launch>
-	<master auto="start"/>
-	<node pkg="map_server" type="map_server" name="map_server" args="$(find tars)/scenarios/ccia_h.yaml"/>
-	<node pkg="tars" type="tars_node" name="tars_node" output="screen" respawn="false" required="true">
-		<param name="scenario" value="$(find tars)/scenarios/ccia_h.scenario.yaml"/>
-	</node>
-	<node pkg="rviz" type="rviz" name="rviz" args="-d $(find tars)/rviz/tars.rviz"/>
-</launch>

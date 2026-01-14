@@ -1,9 +1,0 @@
-string id
-uint8 type
-float64 radius
-Vector2DMsg position
-float64 yaw
-Vector2DMsg velocity
-Vector2DMsg goal
-bool hasForces
-ForcesMsg forces
