@@ -1,3 +1,7 @@
+# WORK IN PROGRESS
+
+This is the ROS2 Humble version, but it is not finished yet.
+
 # TARS is Another Robot Simulator
 A ROS multi-agent simulator based on the Social Force Model (SFM). It includes two types of agents:
 
@@ -5,7 +9,7 @@ A ROS multi-agent simulator based on the Social Force Model (SFM). It includes t
 
 * Dual-wheeled **robots** following velocity commands. Each robot publish its own odometry, laser scan and people detection. Each one is subscribed to its own *cmd_vel* topic to receive velocity commands. The robot radius, number of laser scan readings, laser scan range and people detection range can be configured individually for each one.
 
-The simulator has been developed as a lightweight ROS package and includes cool RVIZ visualization, the number of dependencies has been minimized for optimal execution. It has been successfully tested on ROS Noetic, Melodic and Kinetic. 
+The simulator has been developed as a lightweight ROS package and includes cool RVIZ visualization, the number of dependencies has been minimized for optimal execution. This is the **ROS2 Humble version**. 
 
 ![TARS simulator](pictures/tars.png)
 
@@ -15,9 +19,6 @@ The SFM used by TARS is based on the model proposed by Helbing and Molnar:
 
 -  Helbing, Dirk & Molnar, Peter. (1998). *Social Force Model for Pedestrian Dynamics*. Physical Review E. 51. 10.1103/PhysRevE.51.4282. 
 
-## Dependencies
-
-sudo apt install ros-noetic-map-server
 
 ## Installation and quick start
 
