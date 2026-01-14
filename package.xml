@@ -3,8 +3,8 @@
 <package format="3">
   <name>tars</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="ignacioperez1@protonmail.com">nacho</maintainer>
+  <description>TARS: Another Robot Simulator for ROS2 Humble Hawksbill</description>
+  <maintainer email="15214548+Ignacio-Perez@users.noreply.github.com">Ignacio Perez-Hurtado</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
