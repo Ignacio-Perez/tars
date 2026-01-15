@@ -1,0 +1,4 @@
+Vector2DMsg desired_force
+Vector2DMsg obstacle_force
+Vector2DMsg social_force
+Vector2DMsg global_force
