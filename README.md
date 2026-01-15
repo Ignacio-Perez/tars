@@ -5,9 +5,16 @@ A ROS multi-agent simulator based on the Social Force Model (SFM). It includes t
 
 * Dual-wheeled **robots** following velocity commands. Each robot publish its own odometry, laser scan and people detection. Each one is subscribed to its own *cmd_vel* topic to receive velocity commands. The robot radius, number of laser scan readings, laser scan range and people detection range can be configured individually for each one.
 
-The simulator has been developed as a lightweight ROS package and includes cool RVIZ visualization, the number of dependencies has been minimized for optimal execution. It has been successfully tested on ROS Noetic, Melodic and Kinetic. 
+The simulator has been developed as a lightweight ROS package and includes cool RVIZ visualization, the number of dependencies has been minimized for optimal execution. This is the **ROS Noetic version**.
 
 ![TARS simulator](pictures/tars.png)
+
+## Requirements
+
+* [Ubuntu 20.04 LTS](https://www.releases.ubuntu.com/focal/)
+* [ROS Noetic Full Desktop](https://wiki.ros.org/noetic/Installation/Ubuntu)
+* [ROS Map Server](https://wiki.ros.org/map_server)
+  
 
 ## Social Force Model
 
@@ -15,16 +22,13 @@ The SFM used by TARS is based on the model proposed by Helbing and Molnar:
 
 -  Helbing, Dirk & Molnar, Peter. (1998). *Social Force Model for Pedestrian Dynamics*. Physical Review E. 51. 10.1103/PhysRevE.51.4282. 
 
-## Dependencies
-
-sudo apt install ros-noetic-map-server
 
 ## Installation and quick start
 
 Clone this repository in the source folder of your catkin workspace and compile with catkin_make. Packages *map_server* and *rviz* are recommended.
 
 1. cd \~/catkin_ws/src
-2. git clone https://github.com/Ignacio-Perez/TARS 
+2. git clone https://github.com/Ignacio-Perez/tars 
 3. cd ..
 4. catkin_make
 
