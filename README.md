@@ -1,7 +1,3 @@
-# WORK IN PROGRESS
-
-This is the ROS2 Humble version, but it is not finished yet.
-
 # TARS is Another Robot Simulator
 A ROS multi-agent simulator based on the Social Force Model (SFM). It includes two types of agents:
 
