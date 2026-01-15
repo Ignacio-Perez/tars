@@ -9,6 +9,14 @@ The simulator has been developed as a lightweight ROS package and includes cool 
 
 ![TARS simulator](pictures/tars.png)
 
+## Requirements
+
+* [Ubuntu 22.04 LTS](https://releases.ubuntu.com/jammy/)
+* [ROS2 Humble Hawksbill](https://docs.ros.org/en/humble/index.html)
+* sudo apt install ros-humble-rviz2
+* sudo apt install ros-humble-nav2-map-server
+* sudo apt install ros-humble-nav2-lifecycle-manager
+
 ## Social Force Model
 
 The SFM used by TARS is based on the model proposed by Helbing and Molnar:
@@ -18,16 +26,16 @@ The SFM used by TARS is based on the model proposed by Helbing and Molnar:
 
 ## Installation and quick start
 
-Clone this repository in the source folder of your catkin workspace and compile with catkin_make. Packages *map_server* and *rviz* are recommended.
+Clone this repository in the source folder of your ROS2 workspace and compile with colcon. 
 
-1. cd \~/catkin_ws/src
-2. git clone https://github.com/Ignacio-Perez/TARS 
+1. cd \~/ros2_ws/src
+2. git clone https://github.com/Ignacio-Perez/tars 
 3. cd ..
-4. catkin_make
+4. colcon build
 
 You can launch a test scenario as follows:
 
-1. roslaunch tars ccia_h.launch
+1. ros2 launch tars ccia_h.launch.py
 
 ## Nodes
 
