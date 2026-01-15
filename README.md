@@ -133,7 +133,7 @@ You can launch a test scenario as follows:
 
 ## TF
 
-The next TF diagram shows an example for two robots called 01 and 02. 
+The next TF diagram shows an example for two robots called r01 and r02. 
 
 ![TF](pictures/tf.png)
 
