@@ -65,14 +65,14 @@ void TarsNode::setRobotGoal(const std::shared_ptr<tars::srv::RobotGoalSrv::Reque
 }
 
 void TarsNode::init() {
-    this->declare_parameter<std::string>("scenario","");
-    std::string scenario = this->get_parameter("scenario").as_string();
+    declare_parameter<std::string>("scenario","");
+    std::string scenario = get_parameter("scenario").as_string();
     if (scenario.size()==0) {
         throw std::runtime_error("Empty scenario path");
     }
-    RCLCPP_INFO(this->get_logger(), "Loading scenario '%s'", scenario.c_str()); 
+    RCLCPP_INFO(get_logger(), "Loading scenario '%s'", scenario.c_str()); 
     TARS.load(scenario); 
-    RCLCPP_INFO(this->get_logger(), "Done!"); 
+    RCLCPP_INFO(get_logger(), "Done!"); 
     br = std::make_shared<tf2_ros::TransformBroadcaster>(this);
     for (unsigned i=0;i<AGENTS.size();i++) {
         if (AGENTS[i]->getType()==ROBOT) {
@@ -83,19 +83,19 @@ void TarsNode::init() {
     rclcpp::QoS latched(1);
     latched.transient_local();
     latched.reliable();
-    nodesPub = this->create_publisher<geometry_msgs::msg::Polygon>("tars/nodes",latched);
-    edgesPub = this->create_publisher<geometry_msgs::msg::Polygon>("tars/edges",latched);
-    agentsVisPub = this->create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/agents",1);
-    nodesVisPub = this->create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/nodes",1);
-    edgesVisPub = this->create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/edges",1);
-    forcesVisPub = this->create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/forces",1);
-    agentsPub = this->create_publisher<tars::msg::AgentsMsg>("tars/agents",1);
-    service = this->create_service<tars::srv::RobotGoalSrv>("tars/robot_goal", std::bind(&TarsNode::setRobotGoal,this,std::placeholders::_1, std::placeholders::_2));
-    callbackTimer = this->create_wall_timer(std::chrono::milliseconds(period), std::bind(&TarsNode::callback,this));  
+    nodesPub = create_publisher<geometry_msgs::msg::Polygon>("tars/nodes",latched);
+    edgesPub = create_publisher<geometry_msgs::msg::Polygon>("tars/edges",latched);
+    agentsVisPub = create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/agents",1);
+    nodesVisPub = create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/nodes",1);
+    edgesVisPub = create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/edges",1);
+    forcesVisPub = create_publisher<visualization_msgs::msg::MarkerArray>("tars/visualization/forces",1);
+    agentsPub = create_publisher<tars::msg::AgentsMsg>("tars/agents",1);
+    service = create_service<tars::srv::RobotGoalSrv>("tars/robot_goal", std::bind(&TarsNode::setRobotGoal,this,std::placeholders::_1, std::placeholders::_2));
+    callbackTimer = create_wall_timer(std::chrono::milliseconds(period), std::bind(&TarsNode::callback,this));  
 }
 
 void TarsNode::callback() {
-    currentTime = this->get_clock()->now();
+    currentTime = get_clock()->now();
     if (firstCall) {
         dt = 0.0;
         firstCall = false;
