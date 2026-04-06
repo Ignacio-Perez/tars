@@ -25,8 +25,6 @@ private:
   std::mt19937 gen;                       // Mersenne Twister RNG
   std::uniform_int_distribution<> dist;   // Distribution 0 or 1
 
-  std::string robotID; // Robot ID
-  double nodeFreq;     // Node frequency
   double robotRadius;  // Robot radius (default 0.2m)
   double robotLinVel;  // Robot linear velocity (default 0.6 m/s)
   double robotAngVel;  // Robot angular velocity (default 0.5 rad/s)
@@ -35,7 +33,6 @@ private:
   bool scanReceived = false; // True if at least one scan message has been receive
   bool imminentCollision = false; // True if the robot is about to collide
  
-
   // callback timer to control loop
   rclcpp::TimerBase::SharedPtr timer;
 
@@ -53,11 +50,14 @@ TarsReactiveControl::TarsReactiveControl()
 
 void TarsReactiveControl::init() {
  
-  declare_parameter<std::string>("robot_id","r09");
-  robotID = get_parameter("robot_id").as_string();
+  declare_parameter<std::string>("scan_topic","/tars/r09/scan");
+  std::string scanTopic = get_parameter("scan_topic").as_string();
   
+  declare_parameter<std::string>("cmd_vel_topic","/tars/r09/cmd_vel");
+  std::string cmdVelTopic = get_parameter("cmd_vel_topic").as_string();
+
   declare_parameter<double>("node_freq",30.0);
-  nodeFreq = get_parameter("node_freq").as_double();
+  double nodeFreq = get_parameter("node_freq").as_double();
 
   declare_parameter<double>("robot_radius",0.2);
   robotRadius = get_parameter("robot_radius").as_double();
@@ -68,10 +68,9 @@ void TarsReactiveControl::init() {
   declare_parameter<double>("robot_angular_velocity",0.5);
   robotAngVel = get_parameter("robot_angular_velocity").as_double();
 
-  scanSub = create_subscription<sensor_msgs::msg::LaserScan>(
-      "tars/"+robotID+"/scan", 1, std::bind(&TarsReactiveControl::scanReceivedCallback, this, _1));
+  scanSub = create_subscription<sensor_msgs::msg::LaserScan>(scanTopic, 1, std::bind(&TarsReactiveControl::scanReceivedCallback, this, _1));
 
-  cmdVelPub = create_publisher<geometry_msgs::msg::Twist>("tars/"+robotID+"/cmd_vel",1);
+  cmdVelPub = create_publisher<geometry_msgs::msg::Twist>(cmdVelTopic,1);
 
   int period = std::round(1000.0 / nodeFreq);
 

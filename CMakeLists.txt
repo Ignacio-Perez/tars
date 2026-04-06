@@ -31,6 +31,8 @@ ament_export_include_directories(include)
 
 add_executable(tars_node src/tars_node.cpp)
 add_executable(tars_reactive_control src/tars_reactive_control.cpp)
+add_executable(tars_sfm_control src/tars_sfm_control.cpp)
+
 
 ament_target_dependencies(tars_node 
   rclcpp 
@@ -50,6 +52,12 @@ ament_target_dependencies(tars_reactive_control
   sensor_msgs
 )
 
+ament_target_dependencies(tars_sfm_control 
+  rclcpp
+  geometry_msgs
+  visualization_msgs
+)
+
 rosidl_get_typesupport_target(cpp_typesupport_target
   ${PROJECT_NAME} rosidl_typesupport_cpp)
 
@@ -57,9 +65,12 @@ target_link_libraries(tars_node "${cpp_typesupport_target}")
 
 target_link_libraries(tars_reactive_control "${cpp_typesupport_target}")
 
+target_link_libraries(tars_sfm_control "${cpp_typesupport_target}")
+
 install(TARGETS
   tars_node
   tars_reactive_control
+  tars_sfm_control
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY include/
