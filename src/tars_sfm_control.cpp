@@ -3,6 +3,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include "tars/msg/agents_msg.hpp"
 #include "tars/srv/robot_goal_srv.hpp"
 #include "tars/vector2d.hpp"
@@ -21,6 +22,7 @@ private:
 	void goalReceivedCallback(const geometry_msgs::msg::PoseStamped& msg);
 	void control(); 
 	void dwa();
+	void publishGoals();
 
 	std::string robotID; // Robot ID
 	double robotRadius; // Robot radius
@@ -34,23 +36,27 @@ private:
 
 	std::list<utils::Vector2d> goals; // goals FIFO list
 	utils::Vector2d currentGoal; // current goal
-	double dt;
+	
+	rclcpp::Time time;
 	double K1;
 	double K2;
 
 	// Agents tracking subscription
-  	rclcpp::Subscription<tars::msg::AgentsMsg>::SharedPtr trackingSub;
+  rclcpp::Subscription<tars::msg::AgentsMsg>::SharedPtr trackingSub;
 
-  	// Goal subscription
-  	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalSub;
+  // Goal subscription
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalSub;
 
-  	// cmd_vel publisher
+  // cmd_vel publisher
  	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmdVelPub;
 
-  	// callback timer to control loop
+ 	// Goals visualization publisher
+ 	rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr goalsListPub;
+
+  // callback timer to control loop
 	rclcpp::TimerBase::SharedPtr timer;
   
-  	// Goal client
+  // Goal client
 	rclcpp::Client<tars::srv::RobotGoalSrv>::SharedPtr client;
 
 };
@@ -84,13 +90,16 @@ void TarsSFMControl::init() {
 	declare_parameter<std::string>("goal_topic","/goal_pose");
 	std::string goalTopic = get_parameter("goal_topic").as_string();
 
+	declare_parameter<std::string>("goals_list_topic","/tars/visualization/r09/goals");
+	std::string goalsListTopic = get_parameter("goals_list_topic").as_string();
+
 	declare_parameter<std::string>("goal_service","/tars/robot_goal");
 	std::string goalService = get_parameter("goal_service").as_string();
 
 	declare_parameter<double>("node_freq",20.0);
 	double nodeFreq = get_parameter("node_freq").as_double();
 
-	dt = 1.0 / nodeFreq;
+	time = get_clock()->now();
 
 	trackingSub = create_subscription<tars::msg::AgentsMsg>(trackingTopic, 1, std::bind(&TarsSFMControl::trackingCallback, this, _1));
 
@@ -98,11 +107,13 @@ void TarsSFMControl::init() {
 
 	cmdVelPub = create_publisher<geometry_msgs::msg::Twist>(cmdVelTopic,1);
 
+	goalsListPub = create_publisher<visualization_msgs::msg::MarkerArray>(goalsListTopic,1);
+
 	int period = std::round(1000.0 / nodeFreq);
 
-  	timer = create_wall_timer(std::chrono::milliseconds(period), std::bind(&TarsSFMControl::control,this));  
+  timer = create_wall_timer(std::chrono::milliseconds(period), std::bind(&TarsSFMControl::control,this));  
 
-  	client = create_client<tars::srv::RobotGoalSrv>(goalService);
+  client = create_client<tars::srv::RobotGoalSrv>(goalService);
 }
 
 void TarsSFMControl::trackingCallback(const tars::msg::AgentsMsg& agents) {
@@ -130,6 +141,8 @@ void TarsSFMControl::goalReceivedCallback(const geometry_msgs::msg::PoseStamped&
 
 void TarsSFMControl::control() {
 
+	publishGoals();
+
 	// Remove reached goals
 	while (trackingReceived &&
 		   !goals.empty() && 
@@ -154,7 +167,6 @@ void TarsSFMControl::control() {
 
 	// Here, we have tracking received, available goal service, and at least one unreached goal 
 
-
 	// If the current goal has changed, call the goal service
 	if (currentGoal != goals.front()) {
 		auto request = std::make_shared<tars::srv::RobotGoalSrv::Request>();
@@ -174,6 +186,7 @@ void TarsSFMControl::control() {
 // de acuerdo a unos criterios. En esta implementacion, el criterio es sencillo, elige la trayectoria que mejor
 // aproxime la velocidad instantanea deseada de acuerdo al vector de fuerza global
 void TarsSFMControl::dwa() {
+	
 	// Vector de posibles trayectorias circulares
 	static std::vector<geometry_msgs::msg::Twist> commands;
 	if (commands.empty()) {
@@ -186,6 +199,10 @@ void TarsSFMControl::dwa() {
 			}
 		}
 	}
+
+	rclcpp::Time currentTime = get_clock()->now();
+	double dt = (currentTime - time).seconds();
+	time = currentTime;
 
 	// Calculamos el vector de referencia de velocidad instantanea 
 	utils::Vector2d velocityRef = robotVelocity + robotGlobalForce * dt;
@@ -220,6 +237,62 @@ void TarsSFMControl::dwa() {
 	}
 	cmdVelPub->publish(cmdVel);
 
+}
+
+void TarsSFMControl::publishGoals()
+{
+    visualization_msgs::msg::MarkerArray markers;
+    unsigned counter = 0;
+    int goalId = 1;
+
+    for (auto it = goals.begin(); it != goals.end(); ++it) {
+        visualization_msgs::msg::Marker marker;
+
+        marker.header.frame_id = "map";
+        marker.header.stamp = get_clock()->now();
+
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.id = counter++;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+
+        marker.color.a = 1.0;
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 1.0;
+
+        marker.scale.x = 0.3;
+        marker.scale.y = 0.3;
+        marker.scale.z = 0.3;
+
+        marker.pose.position.x = it->getX();
+        marker.pose.position.y = it->getY();
+        marker.pose.position.z = 0.0;
+
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+
+        marker.lifetime = rclcpp::Duration::from_seconds(0.2);
+
+        markers.markers.push_back(marker);
+
+        marker.id = counter++;
+        marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+
+        marker.color.r = 1.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+
+        marker.pose.position.z = 0.2;
+        marker.text = std::to_string(goalId++);
+
+        marker.lifetime = rclcpp::Duration::from_seconds(0.2);
+
+        markers.markers.push_back(marker);
+    }
+
+    goalsListPub->publish(markers);
 }
 
 int main(int argc, char * argv[])
