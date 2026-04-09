@@ -1,6 +1,6 @@
 #include <chrono>
 #include <string>
-#include <random>
+#include "tars/random.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -21,10 +21,6 @@ private:
 
   void scanReceivedCallback(const sensor_msgs::msg::LaserScan& scan);
 
-  std::random_device rd;                  // Random seed
-  std::mt19937 gen;                       // Mersenne Twister RNG
-  std::uniform_int_distribution<> dist;   // Distribution 0 or 1
-
   double robotRadius;  // Robot radius (default 0.2m)
   double robotLinVel;  // Robot linear velocity (default 0.6 m/s)
   double robotAngVel;  // Robot angular velocity (default 0.5 rad/s)
@@ -41,15 +37,17 @@ private:
   
   // cmd_vel publisher
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmdVelPub;
-
- 
 };
 
 TarsReactiveControl::TarsReactiveControl()
-: Node("tars_reactive_control"), gen(rd()), dist(0, 1) {}
+: Node("tars_reactive_control") {}
 
 void TarsReactiveControl::init() {
  
+  state = INIT;
+  scanReceived = false;
+  imminentCollision = false;
+
   declare_parameter<std::string>("scan_topic","/tars/r09/scan");
   std::string scanTopic = get_parameter("scan_topic").as_string();
   
@@ -105,7 +103,7 @@ void TarsReactiveControl::control() {
 
     case MOVING_FORWARD:
       if (imminentCollision) {
-        if (dist(gen)) {
+        if (RANDOM(2)==0) {
           state = ROTATION_LEFT;
           RCLCPP_INFO(get_logger(), "ROTATION LEFT");
         } else {

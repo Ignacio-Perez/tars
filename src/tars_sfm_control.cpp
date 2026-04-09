@@ -66,6 +66,8 @@ TarsSFMControl::TarsSFMControl()
 
 void TarsSFMControl::init() {
 
+	trackingReceived = false;
+
 	declare_parameter<std::string>("robot_id","r09");
 	robotID = get_parameter("robot_id").as_string();
 
