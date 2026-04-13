@@ -1,5 +1,6 @@
 string id
 float64 gx
 float64 gy
+bool enable_forces
 ---
 bool error

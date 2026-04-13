@@ -56,6 +56,7 @@ void TarsNode::setRobotGoal(const std::shared_ptr<tars::srv::RobotGoalSrv::Reque
             Robot* robot = (Robot*)AGENTS[i];
             utils::Vector2d goal(req->gx,req->gy);
             robot->setGoal(goal);
+            robot->enableForces(req->enable_forces);
             res->error=false;
             return;
         }

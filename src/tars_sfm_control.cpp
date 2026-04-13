@@ -4,12 +4,16 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "tars/msg/agents_msg.hpp"
 #include "tars/srv/robot_goal_srv.hpp"
 #include "tars/vector2d.hpp"
 #include "tars/angle.hpp"
 
 using std::placeholders::_1;
+using std::placeholders::_2;
+
+using Trigger = std_srvs::srv::Trigger;
 
 class TarsSFMControl : public rclcpp::Node 
 {
@@ -23,6 +27,8 @@ private:
 	void control(); 
 	void dwa();
 	void publishGoals();
+	void reset(const std::shared_ptr<Trigger::Request> request,
+        std::shared_ptr<Trigger::Response> response);
 
 	std::string robotID; // Robot ID
 	double robotRadius; // Robot radius
@@ -37,9 +43,10 @@ private:
 	std::list<utils::Vector2d> goals; // goals FIFO list
 	utils::Vector2d currentGoal; // current goal
 	
-	rclcpp::Time time;
+	
 	double K1;
 	double K2;
+	double dt;
 
 	// Agents tracking subscription
   rclcpp::Subscription<tars::msg::AgentsMsg>::SharedPtr trackingSub;
@@ -57,7 +64,9 @@ private:
 	rclcpp::TimerBase::SharedPtr timer;
   
   // Goal client
-	rclcpp::Client<tars::srv::RobotGoalSrv>::SharedPtr client;
+	rclcpp::Client<tars::srv::RobotGoalSrv>::SharedPtr goalSrv;
+
+	rclcpp::Service<Trigger>::SharedPtr resetSrv;
 
 };
 
@@ -77,10 +86,10 @@ void TarsSFMControl::init() {
  	declare_parameter<double>("robot_max_vel",0.6);
  	robotMaxVel = get_parameter("robot_max_vel").as_double();
 
- 	declare_parameter<double>("K1",10.0);
+ 	declare_parameter<double>("K1",1.0);
  	K1 = get_parameter("K1").as_double();
 
- 	declare_parameter<double>("K2",0.1);
+ 	declare_parameter<double>("K2",0);
  	K2 = get_parameter("K2").as_double();
 
 	declare_parameter<std::string>("agents_tracking_topic","/tars/r09/agents_tracking");
@@ -89,19 +98,23 @@ void TarsSFMControl::init() {
 	declare_parameter<std::string>("cmd_vel_topic","/tars/r09/cmd_vel");
 	std::string cmdVelTopic = get_parameter("cmd_vel_topic").as_string();
 
+	declare_parameter<std::string>("reset_service","/tars_sfm_control/r09/reset");
+	std::string resetSrvName = get_parameter("reset_service").as_string();
+
 	declare_parameter<std::string>("goal_topic","/goal_pose");
 	std::string goalTopic = get_parameter("goal_topic").as_string();
 
-	declare_parameter<std::string>("goals_list_topic","/tars/visualization/r09/goals");
+	declare_parameter<std::string>("goals_list_topic","/tars_sfm_control/visualization/r09/goals");
 	std::string goalsListTopic = get_parameter("goals_list_topic").as_string();
 
 	declare_parameter<std::string>("goal_service","/tars/robot_goal");
 	std::string goalService = get_parameter("goal_service").as_string();
 
-	declare_parameter<double>("node_freq",20.0);
+	declare_parameter<double>("node_freq",100.0);
 	double nodeFreq = get_parameter("node_freq").as_double();
+	dt = 1.0 / nodeFreq;
 
-	time = get_clock()->now();
+	
 
 	trackingSub = create_subscription<tars::msg::AgentsMsg>(trackingTopic, 1, std::bind(&TarsSFMControl::trackingCallback, this, _1));
 
@@ -115,7 +128,13 @@ void TarsSFMControl::init() {
 
   timer = create_wall_timer(std::chrono::milliseconds(period), std::bind(&TarsSFMControl::control,this));  
 
-  client = create_client<tars::srv::RobotGoalSrv>(goalService);
+  goalSrv = create_client<tars::srv::RobotGoalSrv>(goalService);
+
+  resetSrv = create_service<Trigger>(
+            resetSrvName,
+            std::bind(&TarsSFMControl::reset, this,
+                      std::placeholders::_1,
+                      std::placeholders::_2));
 }
 
 void TarsSFMControl::trackingCallback(const tars::msg::AgentsMsg& agents) {
@@ -141,6 +160,28 @@ void TarsSFMControl::goalReceivedCallback(const geometry_msgs::msg::PoseStamped&
 	RCLCPP_INFO(get_logger(),"Goal received (%f, %f)",goal.getX(),goal.getY());
 }
 
+void TarsSFMControl::reset(const std::shared_ptr<Trigger::Request> request,
+        std::shared_ptr<Trigger::Response> response) {
+
+	RCLCPP_INFO(get_logger(), "RESET");
+	geometry_msgs::msg::Twist cmdVel;
+	cmdVel.linear.x = 0;
+  cmdVel.angular.z = 0;
+  cmdVelPub->publish(cmdVel);
+
+  auto r = std::make_shared<tars::srv::RobotGoalSrv::Request>();
+	r->id = robotID;
+	r->enable_forces = false;
+	goalSrv->async_send_request(r); 
+
+  trackingReceived = false;
+  goals.clear();
+  (void)request;
+  response->success = true;
+  response->message = "SUCCESS";
+
+}
+
 void TarsSFMControl::control() {
 
 	publishGoals();
@@ -158,7 +199,7 @@ void TarsSFMControl::control() {
 	// or goals are empty:
 	// stop the robot and return
 	if (!trackingReceived || 
-		!client->service_is_ready() ||
+		!goalSrv->service_is_ready() ||
 		goals.empty()) {
 		geometry_msgs::msg::Twist cmdVel;
 		cmdVel.linear.x = 0;
@@ -173,9 +214,10 @@ void TarsSFMControl::control() {
 	if (currentGoal != goals.front()) {
 		auto request = std::make_shared<tars::srv::RobotGoalSrv::Request>();
 		request->id = robotID;
+		request->enable_forces = true;
 		request->gx = goals.front().getX();
 		request->gy = goals.front().getY();
-		auto future = client->async_send_request(request); // TODO check response
+		auto future = goalSrv->async_send_request(request); 
 		currentGoal = goals.front();
 	}
 
@@ -192,8 +234,8 @@ void TarsSFMControl::dwa() {
 	// Vector de posibles trayectorias circulares
 	static std::vector<geometry_msgs::msg::Twist> commands;
 	if (commands.empty()) {
-		for (double lin = 0; lin<= 0.6; lin+=0.05) {
-			for (double ang = -0.8; ang<=0.8; ang+=0.05) {
+		for (double lin = 0; lin<= 0.6; lin+=0.01) {
+			for (double ang = -0.8; ang<=0.8; ang+=0.01) {
 				geometry_msgs::msg::Twist cmdVel;
 				cmdVel.linear.x = lin;
 				cmdVel.angular.z = ang;
@@ -202,9 +244,6 @@ void TarsSFMControl::dwa() {
 		}
 	}
 
-	rclcpp::Time currentTime = get_clock()->now();
-	double dt = (currentTime - time).seconds();
-	time = currentTime;
 
 	// Calculamos el vector de referencia de velocidad instantanea 
 	utils::Vector2d velocityRef = robotVelocity + robotGlobalForce * dt;
@@ -262,9 +301,9 @@ void TarsSFMControl::publishGoals()
         marker.color.g = 1.0;
         marker.color.b = 1.0;
 
-        marker.scale.x = 0.3;
-        marker.scale.y = 0.3;
-        marker.scale.z = 0.3;
+        marker.scale.x = 0.15;
+        marker.scale.y = 0.15;
+        marker.scale.z = 0.15;
 
         marker.pose.position.x = it->getX();
         marker.pose.position.y = it->getY();

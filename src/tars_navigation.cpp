@@ -7,11 +7,15 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "tars/navigation_map.hpp"
 #include "visualization_msgs/msg/marker.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "tars/tf2.hpp"
 #include "tars/rrt.hpp"
 
 using std::placeholders::_1;
+using std::placeholders::_2;
+
+using Trigger = std_srvs::srv::Trigger;
 
 enum State {INIT, COMPUTING_RRT, NAVIGATING};
 
@@ -27,6 +31,11 @@ private:
     void mapReceivedCallback(const nav_msgs::msg::OccupancyGrid& msg);
     void odomReceivedCallback(const nav_msgs::msg::Odometry& msg);
     void goalReceivedCallback(const geometry_msgs::msg::PoseStamped& msg);
+    void startNavigation(const std::shared_ptr<Trigger::Request> request,
+        std::shared_ptr<Trigger::Response> response);
+
+    void stopNavigation(const std::shared_ptr<Trigger::Request> request,
+        std::shared_ptr<Trigger::Response> response);
 
     double robotRadius;
 
@@ -49,6 +58,12 @@ private:
 
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr mapPub;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pathPub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goalPub;
+
+    rclcpp::Service<Trigger>::SharedPtr startNavSrv;
+    rclcpp::Service<Trigger>::SharedPtr stopNavSrv;
+
+    rclcpp::Client<Trigger>::SharedPtr resetSrv;
 
     rclcpp::TimerBase::SharedPtr timer;
 
@@ -66,24 +81,36 @@ void TarsNavigation::init() {
 
     TF2.init(shared_from_this());
 
-    declare_parameter<double>("node_freq",20.0);
+    declare_parameter<double>("node_freq",30.0);
     double nodeFreq = get_parameter("node_freq").as_double();
 
     computingTime = (1.0 / nodeFreq)*0.9;
 
-    declare_parameter<std::string>("goal_topic","/goal_pose");
-    std::string goalTopic = get_parameter("goal_topic").as_string();
+    declare_parameter<std::string>("global_goal_topic","/goal_pose");
+    std::string globalGoalTopic = get_parameter("global_goal_topic").as_string();
+
+    declare_parameter<std::string>("local_goal_topic","/tars_sfm_control/r09/goal");
+    std::string localGoalTopic = get_parameter("local_goal_topic").as_string();
+
+    declare_parameter<std::string>("reset_local_nav","/tars_sfm_control/r09/reset");
+    std::string resetLocalNavSrvName = get_parameter("reset_local_nav").as_string();
+
+     declare_parameter<std::string>("start_nav_srv","/tars_navigation/r09/start");
+    std::string startNavSrvName = get_parameter("start_nav_srv").as_string();
+
+    declare_parameter<std::string>("stop_nav_srv","/tars_navigation/r09/stop");
+    std::string stopNavSrvName = get_parameter("stop_nav_srv").as_string();
 
     declare_parameter<std::string>("map_topic","/map");
     std::string mapTopic = get_parameter("map_topic").as_string();
 
-    declare_parameter<std::string>("nav_map_topic","/nav_map");
+    declare_parameter<std::string>("nav_map_topic","/tars_navigation/r09/map");
     std::string navMapTopic = get_parameter("nav_map_topic").as_string();
 
     declare_parameter<std::string>("odom_topic","/tars/r09/odom");
     std::string odomTopic = get_parameter("odom_topic").as_string();
 
-    declare_parameter<std::string>("path_topic","/tars/visualization/r09/path");
+    declare_parameter<std::string>("path_topic","/tars_navigation/visualization/r09/path");
     std::string pathTopic = get_parameter("path_topic").as_string();
 
     declare_parameter<double>("robot_radius",0.2);
@@ -98,14 +125,80 @@ void TarsNavigation::init() {
 
     mapSub = create_subscription<nav_msgs::msg::OccupancyGrid>(mapTopic, qos, std::bind(&TarsNavigation::mapReceivedCallback, this, _1));
     odomSub = create_subscription<nav_msgs::msg::Odometry>(odomTopic,1,std::bind(&TarsNavigation::odomReceivedCallback, this, _1));
-    goalSub = create_subscription<geometry_msgs::msg::PoseStamped>(goalTopic,1, std::bind(&TarsNavigation::goalReceivedCallback, this, _1));
+    goalSub = create_subscription<geometry_msgs::msg::PoseStamped>(globalGoalTopic,1, std::bind(&TarsNavigation::goalReceivedCallback, this, _1));
     pathPub = create_publisher<visualization_msgs::msg::Marker>(pathTopic,1);
 
     mapPub = create_publisher<nav_msgs::msg::OccupancyGrid>(navMapTopic,qos);
+    goalPub = create_publisher<geometry_msgs::msg::PoseStamped>(localGoalTopic,1);
+
+    resetSrv = create_client<Trigger>(resetLocalNavSrvName);
+
+    startNavSrv = create_service<Trigger>(
+            startNavSrvName,
+            std::bind(&TarsNavigation::startNavigation, this,
+                      std::placeholders::_1,
+                      std::placeholders::_2));
+
+    stopNavSrv = create_service<Trigger>(
+            stopNavSrvName,
+            std::bind(&TarsNavigation::stopNavigation, this,
+                      std::placeholders::_1,
+                      std::placeholders::_2));
 
     int period = std::round(1000.0 / nodeFreq);
 
     timer = create_wall_timer(std::chrono::milliseconds(period), std::bind(&TarsNavigation::control,this));  
+
+}
+
+void TarsNavigation::stopNavigation(const std::shared_ptr<Trigger::Request> req,
+        std::shared_ptr<Trigger::Response> res) {
+
+    (void)req;
+    robotState = INIT;
+    goalReceived = false;
+    path.clear();
+    rrt.clear();
+    auto r = std::make_shared<Trigger::Request>();
+    resetSrv->async_send_request(r); 
+    res->success = true;
+    res->message = "SUCCESS";
+
+}
+
+void TarsNavigation::startNavigation(const std::shared_ptr<Trigger::Request> req,
+        std::shared_ptr<Trigger::Response> res) {
+
+    (void)req;
+
+    if (robotState==NAVIGATING) {
+        res->success = false;
+        res->message = "Already navigating";
+    } else if (robotState==INIT) {
+        res->success = false;
+        res->message = "Not initiated";
+    } else if (!goalReceived) {
+        res->success = false;
+        res->message = "Goal has not been received";
+    } else if (path.empty()) {
+        res->success = false;
+        res->message = "Path is empty";
+    } else {
+        robotState = NAVIGATING;
+        res->success = true;
+        res->message = "SUCCESS";
+        geometry_msgs::msg::PoseStamped goal;
+        goal.header.frame_id = "map";
+        goal.pose.position.z = 0;
+        goal.pose.orientation.w = 1;
+        for (auto it = path.begin();it!=path.end();++it) {
+            goal.header.stamp = get_clock()->now();
+            goal.pose.position.x = it->getX();
+            goal.pose.position.y = it->getY();
+            goalPub->publish(goal);
+            rclcpp::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
 
 }
 
