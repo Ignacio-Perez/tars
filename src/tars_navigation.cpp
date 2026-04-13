@@ -81,7 +81,7 @@ void TarsNavigation::init() {
 
     TF2.init(shared_from_this());
 
-    declare_parameter<double>("node_freq",30.0);
+    declare_parameter<double>("node_freq",20.0);
     double nodeFreq = get_parameter("node_freq").as_double();
 
     computingTime = (1.0 / nodeFreq)*0.9;

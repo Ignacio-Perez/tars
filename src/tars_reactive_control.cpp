@@ -54,7 +54,7 @@ void TarsReactiveControl::init() {
   declare_parameter<std::string>("cmd_vel_topic","/tars/r09/cmd_vel");
   std::string cmdVelTopic = get_parameter("cmd_vel_topic").as_string();
 
-  declare_parameter<double>("node_freq",30.0);
+  declare_parameter<double>("node_freq",40.0);
   double nodeFreq = get_parameter("node_freq").as_double();
 
   declare_parameter<double>("robot_radius",0.2);
