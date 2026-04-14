@@ -90,7 +90,7 @@ void TarsSFMControl::init() {
  	declare_parameter<double>("K1",1.0);
  	K1 = get_parameter("K1").as_double();
 
- 	declare_parameter<double>("K2",0);
+ 	declare_parameter<double>("K2",0.1);
  	K2 = get_parameter("K2").as_double();
 
 	declare_parameter<std::string>("agents_tracking_topic","/tars/r09/agents_tracking");
@@ -111,7 +111,7 @@ void TarsSFMControl::init() {
 	declare_parameter<std::string>("goal_service","/tars/robot_goal");
 	std::string goalService = get_parameter("goal_service").as_string();
 
-	declare_parameter<double>("node_freq",20.0);
+	declare_parameter<double>("node_freq",30.0);
 	double nodeFreq = get_parameter("node_freq").as_double();
 	dt = 1.0 / nodeFreq;
 
