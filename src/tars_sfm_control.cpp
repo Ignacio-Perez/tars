@@ -15,6 +15,8 @@ using std::placeholders::_2;
 
 using Trigger = std_srvs::srv::Trigger;
 
+enum State {INIT, WAITING, MOVING};
+
 class TarsSFMControl : public rclcpp::Node 
 {
 public:
@@ -25,7 +27,7 @@ private:
 	void trackingCallback(const tars::msg::AgentsMsg& agents);
 	void goalReceivedCallback(const geometry_msgs::msg::PoseStamped& msg);
 	void control(); 
-	void dwa();
+	void dwa(const utils::Vector2d& force);
 	void publishGoals();
 	void reset(const std::shared_ptr<Trigger::Request> request,
         std::shared_ptr<Trigger::Response> response);
@@ -33,17 +35,15 @@ private:
 	std::string robotID; // Robot ID
 	double robotRadius; // Robot radius
 	double robotMaxVel; // Robot max velocity (m/s)
-	bool trackingReceived = false; // True if at least one tracking message has been received
 	
 	utils::Vector2d robotPosition; // Robot position ("map" frame)
 	utils::Angle robotYaw; // Robot yaw angle
 	utils::Vector2d robotVelocity; // Robot velocity
-	utils::Vector2d robotGlobalForce; // Robot global force (SFM)
 
 	std::list<utils::Vector2d> goals; // goals FIFO list
 	utils::Vector2d currentGoal; // current goal
 	
-	
+	State state = INIT;
 	double K1;
 	double K2;
 	double dt;
@@ -75,7 +75,8 @@ TarsSFMControl::TarsSFMControl()
 
 void TarsSFMControl::init() {
 
-	trackingReceived = false;
+	state = INIT;
+	RCLCPP_WARN(get_logger(),"State: INIT");
 
 	declare_parameter<std::string>("robot_id","r09");
 	robotID = get_parameter("robot_id").as_string();
@@ -110,7 +111,7 @@ void TarsSFMControl::init() {
 	declare_parameter<std::string>("goal_service","/tars/robot_goal");
 	std::string goalService = get_parameter("goal_service").as_string();
 
-	declare_parameter<double>("node_freq",40.0);
+	declare_parameter<double>("node_freq",20.0);
 	double nodeFreq = get_parameter("node_freq").as_double();
 	dt = 1.0 / nodeFreq;
 
@@ -143,11 +144,16 @@ void TarsSFMControl::trackingCallback(const tars::msg::AgentsMsg& agents) {
 			robotPosition.set(agents.agents[i].position.x, agents.agents[i].position.y);
 			robotYaw.setRadian(agents.agents[i].yaw);
 			robotVelocity.set(agents.agents[i].velocity.x, agents.agents[i].velocity.y);
-			robotGlobalForce.set(agents.agents[i].forces.global_force.x,agents.agents[i].forces.global_force.y);
+			if (state == INIT) {
+				state = WAITING;
+				RCLCPP_WARN(get_logger(),"State: WAITING");
+			} else if (state == MOVING) {
+				utils::Vector2d force(agents.agents[i].forces.global_force.x,agents.agents[i].forces.global_force.y);
+				dwa(force);
+			}
 			break;
 		}
 	}
-	trackingReceived = true;
 }
 
 void TarsSFMControl::goalReceivedCallback(const geometry_msgs::msg::PoseStamped& msg) {
@@ -174,7 +180,8 @@ void TarsSFMControl::reset(const std::shared_ptr<Trigger::Request> request,
 	r->enable_forces = false;
 	goalSrv->async_send_request(r); 
 
-  trackingReceived = false;
+  state = INIT;
+  RCLCPP_WARN(get_logger(),"State: INIT");
   goals.clear();
   (void)request;
   response->success = true;
@@ -186,9 +193,12 @@ void TarsSFMControl::control() {
 
 	publishGoals();
 
+	if (state == INIT || !goalSrv->service_is_ready()) {
+		return;
+	}
+
 	// Remove reached goals
-	while (trackingReceived &&
-		   !goals.empty() && 
+	while (!goals.empty() && 
 		    (robotPosition - goals.front()).norm() < 2.0 * robotRadius) {
 		RCLCPP_INFO(get_logger(),"Goal reached (%f, %f)",goals.front().getX(),goals.front().getY());
 		goals.pop_front();
@@ -198,14 +208,21 @@ void TarsSFMControl::control() {
 	// or the goal service is not ready, 
 	// or goals are empty:
 	// stop the robot and return
-	if (!trackingReceived || 
-		!goalSrv->service_is_ready() ||
-		goals.empty()) {
-		geometry_msgs::msg::Twist cmdVel;
-		cmdVel.linear.x = 0;
-        cmdVel.angular.z = 0;
-        cmdVelPub->publish(cmdVel);
+	if (goals.empty()) {
+		if (state == MOVING) {
+			geometry_msgs::msg::Twist cmdVel;
+			cmdVel.linear.x = 0;
+      cmdVel.angular.z = 0;
+      cmdVelPub->publish(cmdVel);
+			state = WAITING;
+			RCLCPP_INFO(get_logger(),"State: WAITING");
+		}
 		return;
+	}
+
+	if (state != MOVING) {
+		state = MOVING;
+		RCLCPP_INFO(get_logger(),"State: MOVING");
 	}
 
 	// Here, we have tracking received, available goal service, and at least one unreached goal 
@@ -220,22 +237,18 @@ void TarsSFMControl::control() {
 		auto future = goalSrv->async_send_request(request); 
 		currentGoal = goals.front();
 	}
-
-	// call Dynamic Window Approach algorithm
-	dwa();
-
 }
 
 // Algoritmo Dynamic Window Approach que valora una serie de trayectorias circulares y ejecuta la mas apropiada
 // de acuerdo a unos criterios. En esta implementacion, el criterio es sencillo, elige la trayectoria que mejor
 // aproxime la velocidad instantanea deseada de acuerdo al vector de fuerza global
-void TarsSFMControl::dwa() {
+void TarsSFMControl::dwa(const utils::Vector2d& force) {
 	
 	// Vector de posibles trayectorias circulares
 	static std::vector<geometry_msgs::msg::Twist> commands;
 	if (commands.empty()) {
-		for (double lin = 0; lin<= 0.6; lin+=0.01) {
-			for (double ang = -0.8; ang<=0.8; ang+=0.01) {
+		for (double lin = 0; lin<= 0.6; lin+=0.05) {
+			for (double ang = -0.8; ang<=0.8; ang+=0.05) {
 				geometry_msgs::msg::Twist cmdVel;
 				cmdVel.linear.x = lin;
 				cmdVel.angular.z = ang;
@@ -246,7 +259,7 @@ void TarsSFMControl::dwa() {
 
 
 	// Calculamos el vector de referencia de velocidad instantanea 
-	utils::Vector2d velocityRef = robotVelocity + robotGlobalForce * dt;
+	utils::Vector2d velocityRef = robotVelocity + force * dt;
 
 	// Si el vector de referencia excede la velocidad maxima, ajustamos
 	if (velocityRef.norm() > robotMaxVel) {
